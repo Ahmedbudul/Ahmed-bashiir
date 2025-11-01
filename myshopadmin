@@ -1,0 +1,443 @@
+# app_admin.py
+import customtkinter as ctk
+from tkinter import ttk, messagebox
+import mysql.connector
+from PIL import Image, ImageTk
+import os
+
+# ---------------------------
+# Database connection
+# ---------------------------
+db = mysql.connector.connect(
+    host="localhost",
+    user="root",
+    password="",
+    database="cunto_db"
+)
+cursor = db.cursor()
+
+# ---------------------------
+# App setup
+# ---------------------------
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("green")
+
+app = ctk.CTk()
+app.title("Admin Panel — XISAAB & CUSTOMERS")
+app.geometry("1200x750")
+app.minsize(1000, 650)
+
+# ---------------------------
+# Helper: load icon if exists
+# ---------------------------
+def load_icon(path, size=(20,20)):
+    try:
+        im = Image.open(path).convert("RGBA")
+        im = im.resize(size, Image.ANTIALIAS)
+        return ImageTk.PhotoImage(im)
+    except Exception:
+        return None
+
+# Try load optional icons (place png files in same folder if desired)
+ICON_ADD = load_icon("icon_add.png", (18,18))
+ICON_UPDATE = load_icon("icon_update.png", (18,18))
+ICON_DELETE = load_icon("icon_delete.png", (18,18))
+ICON_SEARCH = load_icon("icon_search.png", (18,18))
+ICON_STATS = load_icon("icon_stats.png", (24,24))
+
+# ---------------------------
+# Layout: sidebar + main area
+# ---------------------------
+sidebar = ctk.CTkFrame(app, width=220, corner_radius=8)
+sidebar.pack(side="left", fill="y", padx=12, pady=12)
+
+main_area = ctk.CTkFrame(app, corner_radius=8)
+main_area.pack(side="left", fill="both", expand=True, padx=(0,12), pady=12)
+
+# Sidebar header
+logo_frame = ctk.CTkFrame(sidebar, fg_color="transparent")
+logo_frame.pack(pady=10)
+ctk.CTkLabel(logo_frame, text="🍲 MyShop Admin", font=("Segoe UI", 16, "bold")).pack()
+
+# Sidebar buttons (navigation)
+def show_dashboard():
+    tabs.set("Dashboard")
+def show_foods_tab():
+    tabs.set("Foods")
+def show_customers_tab():
+    tabs.set("Customers")
+
+ctk.CTkButton(sidebar, text="🏠 Dashboard", command=show_dashboard, corner_radius=6).pack(fill="x", padx=12, pady=6)
+ctk.CTkButton(sidebar, text="🍱 Foods", command=show_foods_tab, corner_radius=6).pack(fill="x", padx=12, pady=6)
+ctk.CTkButton(sidebar, text="👥 Customers", command=show_customers_tab, corner_radius=6).pack(fill="x", padx=12, pady=6)
+ctk.CTkButton(sidebar, text="⚙ Settings", command=lambda: messagebox.showinfo("Settings", "Settings coming soon..."), corner_radius=6).pack(fill="x", padx=12, pady=6)
+
+# Appearance switch (global)
+def toggle_mode():
+    mode = ctk.get_appearance_mode()
+    ctk.set_appearance_mode("light" if mode == "dark" else "dark")
+
+ctk.CTkButton(sidebar, text="🌓 Toggle Dark/Light", command=toggle_mode, corner_radius=6).pack(fill="x", padx=12, pady=14)
+
+# ---------------------------
+# Top: Search global (optional quick search)
+# ---------------------------
+top_bar = ctk.CTkFrame(main_area, height=60, corner_radius=6)
+top_bar.pack(fill="x", padx=12, pady=(12,6))
+
+search_var = ctk.StringVar()
+
+search_entry = ctk.CTkEntry(top_bar, placeholder_text="🔍 Quick search customers...", width=420, textvariable=search_var)
+search_entry.pack(side="left", padx=(12,6), pady=8)
+
+def quick_search():
+    keyword = search_var.get().strip()
+    if keyword == "":
+        messagebox.showinfo("Info", "Fadlan geli magac ama keyword.")
+        return
+    tabs.set("Customers")
+    customer_search(keyword)
+
+ctk.CTkButton(top_bar, text="Search", image=ICON_SEARCH, compound="left", command=quick_search).pack(side="left", padx=6)
+
+# Stats space on top-right
+stats_frame = ctk.CTkFrame(top_bar, fg_color="transparent")
+stats_frame.pack(side="right", padx=12)
+
+total_customers_lbl = ctk.CTkLabel(stats_frame, text="Customers: 0", font=("Segoe UI", 12, "bold"))
+total_customers_lbl.pack(anchor="e")
+total_revenue_lbl = ctk.CTkLabel(stats_frame, text="Total Sales: $0.00", font=("Segoe UI", 12, "bold"))
+total_revenue_lbl.pack(anchor="e")
+
+# ---------------------------
+# TabView: Dashboard / Foods / Customers
+# ---------------------------
+tabs = ctk.CTkTabview(main_area, width=950, height=600)
+tabs.pack(padx=12, pady=(6,12), fill="both", expand=True)
+tabs.add("Dashboard")
+tabs.add("Foods")
+tabs.add("Customers")
+
+# ---------------------------
+# DASHBOARD: summary + charts placeholder
+# ---------------------------
+dash = tabs.tab("Dashboard")
+dash.pack_propagate(False)
+
+dash_top = ctk.CTkFrame(dash)
+dash_top.pack(fill="x", padx=12, pady=12)
+
+# Summary cards
+card1 = ctk.CTkFrame(dash_top, width=220, height=90, corner_radius=8)
+card1.pack(side="left", padx=12)
+ctk.CTkLabel(card1, text="Total Customers", font=("Segoe UI", 12)).pack(pady=(12,0))
+dash_customers_count = ctk.CTkLabel(card1, text="0", font=("Segoe UI", 18, "bold"))
+dash_customers_count.pack()
+
+card2 = ctk.CTkFrame(dash_top, width=220, height=90, corner_radius=8)
+card2.pack(side="left", padx=12)
+ctk.CTkLabel(card2, text="Total Sales ($)", font=("Segoe UI", 12)).pack(pady=(12,0))
+dash_total_sales = ctk.CTkLabel(card2, text="$0.00", font=("Segoe UI", 18, "bold"))
+dash_total_sales.pack()
+
+card3 = ctk.CTkFrame(dash_top, width=220, height=90, corner_radius=8)
+card3.pack(side="left", padx=12)
+ctk.CTkLabel(card3, text="Total Food Items", font=("Segoe UI", 12)).pack(pady=(12,0))
+dash_food_count = ctk.CTkLabel(card3, text="0", font=("Segoe UI", 18, "bold"))
+dash_food_count.pack()
+
+# Placeholder area for chart / future graphs
+chart_frame = ctk.CTkFrame(dash)
+chart_frame.pack(fill="both", padx=12, pady=10, expand=True)
+ctk.CTkLabel(chart_frame, text="📊 Charts / Visuals (coming soon)", font=("Segoe UI", 14)).pack(pady=20)
+
+# ---------------------------
+# FOODS TAB: CRUD + table
+# ---------------------------
+foods_tab = tabs.tab("Foods")
+
+# Left form area
+foods_form = ctk.CTkFrame(foods_tab)
+foods_form.pack(side="top", anchor="n", fill="x", padx=12, pady=8)
+
+food_inputs = {}
+def make_food_input(label_text, col, row):
+    lbl = ctk.CTkLabel(foods_form, text=label_text)
+    lbl.grid(row=row, column=col*2, padx=6, pady=6, sticky="e")
+    ent = ctk.CTkEntry(foods_form, placeholder_text=label_text, width=220)
+    ent.grid(row=row, column=col*2+1, padx=6, pady=6, sticky="w")
+    food_inputs[label_text] = ent
+
+make_food_input("Magac", 0, 0)
+make_food_input("Bariis ($)", 0, 1)
+make_food_input("Bur ($)", 0, 2)
+make_food_input("Sonkor ($)", 1, 1)
+make_food_input("Qudaar ($)", 1, 2)
+
+# Buttons
+def add_food():
+    try:
+        mag = food_inputs["Magac"].get().strip()
+        bariis = float(food_inputs["Bariis ($)"].get())
+        bur = float(food_inputs["Bur ($)"].get())
+        sonkor = float(food_inputs["Sonkor ($)"].get())
+        qudaar = float(food_inputs["Qudaar ($)"].get())
+    except Exception:
+        messagebox.showerror("Error", "Fadlan geli xog sax ah.")
+        return
+    wad = bariis + bur + sonkor + qudaar
+    cursor.execute("INSERT INTO xisaabaha (magac, bariis, bur, sonkor, qudaar, wadarta) VALUES (%s,%s,%s,%s,%s,%s)",
+                   (mag, bariis, bur, sonkor, qudaar, wad))
+    db.commit()
+    refresh_foods()
+    clear_food_inputs()
+    messagebox.showinfo("Added", f"{mag} ayaa lagu daray. Wadarta: ${wad:.2f}")
+
+def update_food():
+    sel = food_table.selection()
+    if not sel:
+        messagebox.showwarning("Select", "Dooro item Update lagu samaynayo.")
+        return
+    iid = food_table.item(sel[0])["values"][0]
+    try:
+        mag = food_inputs["Magac"].get().strip()
+        bariis = float(food_inputs["Bariis ($)"].get())
+        bur = float(food_inputs["Bur ($)"].get())
+        sonkor = float(food_inputs["Sonkor ($)"].get())
+        qudaar = float(food_inputs["Qudaar ($)"].get())
+    except Exception:
+        messagebox.showerror("Error", "Fadlan geli xog sax ah.")
+        return
+    wad = bariis + bur + sonkor + qudaar
+    cursor.execute("UPDATE xisaabaha SET magac=%s, bariis=%s, bur=%s, sonkor=%s, qudaar=%s, wadarta=%s WHERE id=%s",
+                   (mag, bariis, bur, sonkor, qudaar, wad, iid))
+    db.commit()
+    refresh_foods()
+    messagebox.showinfo("Updated", "Food item updated.")
+
+def delete_food():
+    sel = food_table.selection()
+    if not sel:
+        messagebox.showwarning("Select", "Dooro item la tirtirayo.")
+        return
+    iid = food_table.item(sel[0])["values"][0]
+    cursor.execute("DELETE FROM xisaabaha WHERE id=%s", (iid,))
+    db.commit()
+    refresh_foods()
+    messagebox.showinfo("Deleted", "Item deleted.")
+
+def clear_food_inputs():
+    for e in food_inputs.values():
+        e.delete(0, "end")
+
+btn_frame_food = ctk.CTkFrame(foods_tab)
+btn_frame_food.pack(fill="x", padx=12, pady=6)
+ctk.CTkButton(btn_frame_food, text="➕ Add", command=add_food, image=ICON_ADD, compound="left").pack(side="left", padx=6)
+ctk.CTkButton(btn_frame_food, text="🔁 Update", command=update_food, image=ICON_UPDATE, compound="left").pack(side="left", padx=6)
+ctk.CTkButton(btn_frame_food, text="🗑 Delete", command=delete_food, image=ICON_DELETE, compound="left").pack(side="left", padx=6)
+ctk.CTkButton(btn_frame_food, text="🧹 Clear", command=clear_food_inputs).pack(side="left", padx=6)
+
+# Food table
+food_table_frame = ctk.CTkFrame(foods_tab)
+food_table_frame.pack(fill="both", expand=True, padx=12, pady=8)
+columns_food = ("ID", "Magac", "Bariis", "Bur", "Sonkor", "Qudaar", "Wadarta")
+food_table = ttk.Treeview(food_table_frame, columns=columns_food, show="headings", height=12)
+for c in columns_food:
+    food_table.heading(c, text=c)
+    food_table.column(c, width=120, anchor="center")
+food_table.pack(fill="both", expand=True, padx=6, pady=6)
+
+def refresh_foods():
+    for r in food_table.get_children():
+        food_table.delete(r)
+    cursor.execute("SELECT * FROM xisaabaha")
+    rows = cursor.fetchall()
+    for r in rows:
+        food_table.insert("", "end", values=r)
+    # update dashboard stats
+    cursor.execute("SELECT COUNT(*) FROM xisaabaha")
+    food_count = cursor.fetchone()[0] or 0
+    dash_food_count.configure(text=str(food_count))
+    # total sales
+    cursor.execute("SELECT IFNULL(SUM(wadarta),0) FROM xisaabaha")
+    total_sales = cursor.fetchone()[0] or 0
+    dash_total_sales.configure(text=f"${total_sales:.2f}")
+    total_revenue_lbl.configure(text=f"Total Sales: ${total_sales:.2f}")
+
+# Populate form when a food row selected
+def on_food_select(event):
+    sel = food_table.selection()
+    if not sel:
+        return
+    vals = food_table.item(sel[0])["values"]
+    # ID at vals[0], magac vals[1] etc
+    food_inputs["Magac"].delete(0, "end"); food_inputs["Magac"].insert(0, vals[1])
+    food_inputs["Bariis ($)"].delete(0, "end"); food_inputs["Bariis ($)"].insert(0, vals[2])
+    food_inputs["Bur ($)"].delete(0, "end"); food_inputs["Bur ($)"].insert(0, vals[3])
+    food_inputs["Sonkor ($)"].delete(0, "end"); food_inputs["Sonkor ($)"].insert(0, vals[4])
+    food_inputs["Qudaar ($)"].delete(0, "end"); food_inputs["Qudaar ($)"].insert(0, vals[5])
+
+food_table.bind("<<TreeviewSelect>>", on_food_select)
+
+# ---------------------------
+# CUSTOMERS TAB: CRUD + search + update
+# ---------------------------
+cust_tab = tabs.tab("Customers")
+
+cust_form = ctk.CTkFrame(cust_tab)
+cust_form.pack(fill="x", padx=12, pady=8)
+
+cust_inputs = {}
+def make_cust_input(label, col, row):
+    lbl = ctk.CTkLabel(cust_form, text=label)
+    lbl.grid(row=row, column=col*2, padx=6, pady=6, sticky="e")
+    ent = ctk.CTkEntry(cust_form, placeholder_text=label, width=300)
+    ent.grid(row=row, column=col*2+1, padx=6, pady=6, sticky="w")
+    cust_inputs[label] = ent
+
+make_cust_input("Magac", 0, 0)
+make_cust_input("Telefoon", 0, 1)
+make_cust_input("Ciwaan", 0, 2)
+
+# Buttons for customers
+def add_customer():
+    name = cust_inputs["Magac"].get().strip()
+    tel = cust_inputs["Telefoon"].get().strip()
+    addr = cust_inputs["Ciwaan"].get().strip()
+    if not name or not tel:
+        messagebox.showerror("Khalad", "Magaca iyo telefoonka waa muhiim.")
+        return
+    cursor.execute("INSERT INTO customers (magac, telefoon, ciwaan) VALUES (%s,%s,%s)", (name, tel, addr))
+    db.commit()
+    refresh_customers()
+    clear_cust_inputs()
+    messagebox.showinfo("Added", "Customer added successfully.")
+
+def update_customer():
+    sel = cust_table.selection()
+    if not sel:
+        messagebox.showwarning("Select", "Dooro customer update lagu samaynayo.")
+        return
+    cid = cust_table.item(sel[0])["values"][0]
+    name = cust_inputs["Magac"].get().strip()
+    tel = cust_inputs["Telefoon"].get().strip()
+    addr = cust_inputs["Ciwaan"].get().strip()
+    if not name or not tel:
+        messagebox.showerror("Khalad", "Magaca iyo telefoonka waa muhiim.")
+        return
+    cursor.execute("UPDATE customers SET magac=%s, telefoon=%s, ciwaan=%s WHERE id=%s", (name, tel, addr, cid))
+    db.commit()
+    refresh_customers()
+    messagebox.showinfo("Updated", "Customer updated successfully.")
+
+def delete_customer():
+    sel = cust_table.selection()
+    if not sel:
+        messagebox.showwarning("Select", "Dooro customer la tirtirayo.")
+        return
+    cid = cust_table.item(sel[0])["values"][0]
+    cursor.execute("DELETE FROM customers WHERE id=%s", (cid,))
+    db.commit()
+    refresh_customers()
+    messagebox.showinfo("Deleted", "Customer deleted.")
+
+def clear_cust_inputs():
+    for e in cust_inputs.values():
+        e.delete(0, "end")
+
+# Search in customers tab
+search_frame_c = ctk.CTkFrame(cust_tab)
+search_frame_c.pack(fill="x", padx=12, pady=6)
+search_c_var = ctk.StringVar()
+search_c_entry = ctk.CTkEntry(search_frame_c, placeholder_text="🔍 Search customers by name...", width=400, textvariable=search_c_var)
+search_c_entry.pack(side="left", padx=6)
+def customer_search(keyword=None):
+    kw = keyword if keyword is not None else search_c_var.get().strip()
+    for r in cust_table.get_children():
+        cust_table.delete(r)
+    if kw == "":
+        cursor.execute("SELECT * FROM customers")
+    else:
+        cursor.execute("SELECT * FROM customers WHERE magac LIKE %s OR telefoon LIKE %s OR ciwaan LIKE %s", (f"%{kw}%", f"%{kw}%", f"%{kw}%"))
+    rows = cursor.fetchall()
+    for r in rows:
+        cust_table.insert("", "end", values=r)
+
+ctk.CTkButton(search_frame_c, text="Search", image=ICON_SEARCH, compound="left", command=lambda: customer_search(None)).pack(side="left", padx=6)
+ctk.CTkButton(search_frame_c, text="Show All", command=lambda: customer_search("")).pack(side="left", padx=6)
+
+# Customer buttons
+cust_btns = ctk.CTkFrame(cust_tab)
+cust_btns.pack(fill="x", padx=12, pady=6)
+ctk.CTkButton(cust_btns, text="➕ Add", image=ICON_ADD, command=add_customer).pack(side="left", padx=6)
+ctk.CTkButton(cust_btns, text="🔁 Update", image=ICON_UPDATE, command=update_customer).pack(side="left", padx=6)
+ctk.CTkButton(cust_btns, text="🗑 Delete", image=ICON_DELETE, command=delete_customer).pack(side="left", padx=6)
+ctk.CTkButton(cust_btns, text="🧹 Clear", command=clear_cust_inputs).pack(side="left", padx=6)
+
+# Customers table
+cust_table_frame = ctk.CTkFrame(cust_tab)
+cust_table_frame.pack(fill="both", expand=True, padx=12, pady=8)
+columns_cust = ("ID", "Magac", "Telefoon", "Ciwaan", "Taariikh")
+cust_table = ttk.Treeview(cust_table_frame, columns=columns_cust, show="headings", height=12)
+for c in columns_cust:
+    cust_table.heading(c, text=c)
+    cust_table.column(c, width=180, anchor="center")
+cust_table.pack(fill="both", expand=True, padx=6, pady=6)
+
+# When selecting a customer populate form
+def on_customer_select(event):
+    sel = cust_table.selection()
+    if not sel:
+        return
+    vals = cust_table.item(sel[0])["values"]
+    cust_inputs["Magac"].delete(0, "end"); cust_inputs["Magac"].insert(0, vals[1])
+    cust_inputs["Telefoon"].delete(0, "end"); cust_inputs["Telefoon"].insert(0, vals[2])
+    cust_inputs["Ciwaan"].delete(0, "end"); cust_inputs["Ciwaan"].insert(0, vals[3])
+
+cust_table.bind("<<TreeviewSelect>>", on_customer_select)
+
+# Refresh customers function updates dashboard stats too
+def refresh_customers():
+    for r in cust_table.get_children():
+        cust_table.delete(r)
+    cursor.execute("SELECT * FROM customers")
+    rows = cursor.fetchall()
+    for r in rows:
+        cust_table.insert("", "end", values=r)
+    cursor.execute("SELECT COUNT(*) FROM customers")
+    total_cust = cursor.fetchone()[0] or 0
+    total_customers_lbl.configure(text=f"Customers: {total_cust}")
+    dash_customers_count.configure(text=str(total_cust))
+
+# ---------------------------
+# Initial load & stats
+# ---------------------------
+def refresh_all():
+    refresh_foods()
+    refresh_customers()
+
+refresh_all()
+
+# Update top stats on interval (optional)
+def update_top_stats():
+    cursor.execute("SELECT IFNULL(SUM(wadarta),0) FROM xisaabaha")
+    total = cursor.fetchone()[0] or 0
+    total_revenue_lbl.configure(text=f"Total Sales: ${total:.2f}")
+    cursor.execute("SELECT COUNT(*) FROM customers")
+    total_c = cursor.fetchone()[0] or 0
+    total_customers_lbl.configure(text=f"Customers: {total_c}")
+    app.after(5000, update_top_stats)  # every 5 seconds update
+
+update_top_stats()
+
+# ---------------------------
+# Start app
+# ---------------------------
+app.mainloop()
+
+# Close DB gracefully on exit
+try:
+    cursor.close()
+    db.close()
+except:
+    pass
